@@ -2,11 +2,15 @@
   "name": "eon-track-monorepo",
   "private": true,
   "version": "1.0.0",
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "echo 'Run api and web independently'",
     "lint": "echo 'lint placeholder'",
     "test": "echo 'test placeholder'",
-    "db:seed": "node scripts/seed-demo.js"
+    "db:seed": "node scripts/seed-demo.js",
+    "web:dev": "npm run dev -w @eontrack/web"
   }
 }

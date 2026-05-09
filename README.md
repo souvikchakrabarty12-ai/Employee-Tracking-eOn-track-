@@ -54,3 +54,13 @@ This repository provides a production-oriented scaffold for a field-force tracki
 - Reverse proxy with TLS
 - Background worker for reports/notifications
 - Object storage for profile photos and exports (PDF/Excel)
+
+
+## See the app interface
+
+```bash
+npm install
+npm run web:dev
+```
+
+Then open `http://localhost:5173` in your browser.
