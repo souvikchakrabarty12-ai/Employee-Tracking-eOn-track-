@@ -1,0 +1,274 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum EmployeeStatus { ACTIVE INACTIVE }
+enum AttendanceStatus { PRESENT LATE OUTSIDE_GEOFENCE HALF_DAY ABSENT }
+enum CheckType { CLOCK_IN CLOCK_OUT POS_IN POS_OUT }
+enum VisitStatus { COMPLETED MISSED DEVIATED SHORT_STAY }
+enum DeviceStatus { ONLINE OFFLINE }
+enum NotificationChannel { IN_APP EMAIL WHATSAPP }
+enum NotificationType { OUTSIDE_ROUTE MISSED_CHECKIN FAKE_GPS LOW_PRODUCTIVITY LATE_ATTENDANCE SYSTEM }
+
+model Company {
+  id          String      @id @default(cuid())
+  name        String
+  code        String      @unique
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  employees   Employee[]
+  territories Territory[]
+  departments Department[]
+  routes      Route[]
+  posPoints   PosPoint[]
+}
+
+model Department {
+  id        String   @id @default(cuid())
+  companyId String
+  name      String
+  code      String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employees Employee[]
+  @@unique([companyId, code])
+}
+
+model Territory {
+  id          String      @id @default(cuid())
+  companyId    String
+  name        String
+  code        String
+  parentId    String?
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  parent      Territory?  @relation("TerritoryHierarchy", fields: [parentId], references: [id])
+  children    Territory[] @relation("TerritoryHierarchy")
+  routes      Route[]
+  employees   Employee[]
+  posPoints   PosPoint[]
+  @@unique([companyId, code])
+}
+
+model Designation {
+  id        String     @id @default(cuid())
+  companyId String
+  name      String
+  level     Int
+  employees Employee[]
+  @@unique([companyId, name])
+}
+
+model Employee {
+  id                String         @id @default(cuid())
+  companyId         String
+  employeeCode      String
+  fullName          String
+  mobileNumber      String
+  email             String
+  departmentId      String?
+  designationId     String?
+  managerId         String?
+  territoryId       String?
+  profilePhotoUrl   String?
+  status            EmployeeStatus @default(ACTIVE)
+  isDeleted         Boolean        @default(false)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  company           Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  department        Department?    @relation(fields: [departmentId], references: [id])
+  designation       Designation?   @relation(fields: [designationId], references: [id])
+  manager           Employee?      @relation("EmployeeManager", fields: [managerId], references: [id])
+  reportees         Employee[]     @relation("EmployeeManager")
+  territory         Territory?     @relation(fields: [territoryId], references: [id])
+  assignedRoutes    EmployeeRoute[]
+  attendance        Attendance[]
+  checks            GeoCheck[]
+  trackingLogs      TrackingLog[]
+  posVisits         PosVisit[]
+  notifications     Notification[]
+
+  @@unique([companyId, employeeCode])
+  @@unique([companyId, email])
+}
+
+model Route {
+  id            String          @id @default(cuid())
+  companyId      String
+  territoryId    String
+  name          String
+  code          String
+  expectedTatMin Int
+  distanceKm    Float
+  isActive      Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  company       Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  territory     Territory       @relation(fields: [territoryId], references: [id])
+  points        RoutePoint[]
+  assignments   EmployeeRoute[]
+  planners      DailyRoutePlan[]
+  history       RouteHistory[]
+  @@unique([companyId, code])
+}
+
+model RoutePoint {
+  id         String   @id @default(cuid())
+  routeId     String
+  posPointId  String
+  sequence   Int
+  route      Route    @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  posPoint   PosPoint @relation(fields: [posPointId], references: [id])
+  @@unique([routeId, sequence])
+}
+
+model EmployeeRoute {
+  id         String   @id @default(cuid())
+  employeeId String
+  routeId    String
+  fromDate   DateTime
+  toDate     DateTime?
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  route      Route    @relation(fields: [routeId], references: [id], onDelete: Cascade)
+}
+
+model DailyRoutePlan {
+  id         String   @id @default(cuid())
+  employeeId String
+  routeId    String
+  planDate   DateTime
+  notes      String?
+  createdAt  DateTime @default(now())
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  route      Route    @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  @@unique([employeeId, planDate])
+}
+
+model RouteHistory {
+  id         String   @id @default(cuid())
+  routeId    String
+  changedBy  String
+  changeType String
+  payload    Json
+  createdAt  DateTime @default(now())
+  route      Route    @relation(fields: [routeId], references: [id], onDelete: Cascade)
+}
+
+model OfficeGeofence {
+  id         String   @id @default(cuid())
+  companyId  String
+  name       String
+  latitude   Float
+  longitude  Float
+  radiusM    Int
+  isActive   Boolean  @default(true)
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+model Attendance {
+  id            String           @id @default(cuid())
+  employeeId     String
+  attendanceDate DateTime
+  status        AttendanceStatus
+  clockInAt      DateTime?
+  clockOutAt     DateTime?
+  workingMinutes Int?
+  employee      Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  @@unique([employeeId, attendanceDate])
+}
+
+model PosPoint {
+  id            String    @id @default(cuid())
+  companyId      String
+  territoryId    String?
+  storeName      String
+  address        String
+  contactPerson  String?
+  contactNumber  String?
+  latitude       Float
+  longitude      Float
+  radiusM        Int
+  isActive       Boolean   @default(true)
+  company        Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  territory      Territory? @relation(fields: [territoryId], references: [id])
+  routePoints    RoutePoint[]
+  visits         PosVisit[]
+}
+
+model PosVisit {
+  id              String      @id @default(cuid())
+  employeeId       String
+  posPointId       String
+  routeId          String?
+  arrivalAt        DateTime
+  exitAt           DateTime?
+  stayDurationMin  Int?
+  inLat            Float
+  inLng            Float
+  outLat           Float?
+  outLng           Float?
+  routeDeviationM  Float?
+  visitStatus      VisitStatus
+  createdAt        DateTime    @default(now())
+  employee         Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  posPoint         PosPoint    @relation(fields: [posPointId], references: [id], onDelete: Cascade)
+}
+
+model GeoCheck {
+  id            String     @id @default(cuid())
+  employeeId     String
+  checkType      CheckType
+  latitude       Float
+  longitude      Float
+  gpsAccuracyM   Float?
+  isMockLocation Boolean    @default(false)
+  deviceInfo     Json
+  batteryPercent Int?
+  createdAt      DateTime   @default(now())
+  employee       Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model TrackingLog {
+  id             String       @id @default(cuid())
+  employeeId      String
+  timestamp       DateTime
+  latitude        Float
+  longitude       Float
+  speedKmph       Float?
+  heading         Float?
+  batteryPercent  Int?
+  deviceStatus    DeviceStatus
+  isBackground    Boolean      @default(true)
+  employee        Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  @@index([employeeId, timestamp])
+}
+
+model Notification {
+  id          String              @id @default(cuid())
+  employeeId   String?
+  type        NotificationType
+  channel     NotificationChannel
+  title       String
+  body        String
+  metadata    Json?
+  isRead      Boolean             @default(false)
+  createdAt   DateTime            @default(now())
+  employee    Employee?           @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  companyId    String
+  userId       String
+  action      String
+  entityType  String
+  entityId    String
+  oldData     Json?
+  newData     Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+}
